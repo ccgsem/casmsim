@@ -5,7 +5,7 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 # Install necessary system packages
 RUN apt-get update && apt-get install -y --no-install-recommends \
     mpich \
-    libopenmpi-dev \
+    libmpich-dev \
     libomp-dev
 
 # Change the working directory to the `app` directory
@@ -24,4 +24,4 @@ COPY . /app
 # Sync the project
 RUN uv sync --frozen
 
-CMD [ "python", "casmsim/foo.py" ]
+CMD ["mpirun", "-n 1", "python", "-m casmsim.social_model", "config/casmsim.yaml" ]
