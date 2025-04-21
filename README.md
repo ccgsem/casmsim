@@ -6,63 +6,71 @@
 [![Commit activity](https://img.shields.io/github/commit-activity/m/clinejc/casmsim)](https://img.shields.io/github/commit-activity/m/clinejc/casmsim)
 [![License](https://img.shields.io/github/license/clinejc/casmsim)](https://img.shields.io/github/license/clinejc/casmsim)
 
-a PA Python framework for implementing agent-based models that simulate the dynamics of a synthetic population
+`casmsim` is a Python framework for implementing agent-based models that simulate the dynamics of a synthetic population
 
 - **Github repository**: <https://github.com/clinejc/casmsim/>
 - **Documentation** <https://clinejc.github.io/casmsim/>
 
-## Getting started with your project
+## Installation
 
-### 1. Create a New Repository
-
-First, create a repository on GitHub with the same name as this project, and then run the following commands:
+Install the environment with
 
 ```bash
-git init -b main
-git add .
-git commit -m "init commit"
-git remote add origin git@github.com:clinejc/casmsim.git
-git push -u origin main
-```
-
-### 2. Set Up Your Development Environment
-
-Then, install the environment and the pre-commit hooks with
-
-```bash
+export CC=mpicxx; export CXX=mpicxx
 make install
 ```
 
-This will also generate your `uv.lock` file
+To build a Docker image for `casmsim`:
 
-### 3. Run the pre-commit hooks
+* on the MITRE network
 
-Initially, the CI/CD pipeline might be failing due to formatting issues. To resolve those run:
+    ```bash
+    docker build -t casmsim . -f Dockerfile-mitre
+    ```
+
+* off the MITRE network
+
+    ```bash
+    docker build -t casmsim . -f Dockerfile
+    ```
+
+## Launch the modeling environment:
+First create the virtual environments with
 
 ```bash
-uv run pre-commit run -a
+% python -m venv .venv
 ```
 
-### 4. Commit the changes
-
-Lastly, commit the changes made by the two steps above to your repository.
+To launch the virtualenv, run
 
 ```bash
-git add .
-git commit -m 'Fix formatting issues'
-git push origin main
+% source ./.venv/bin/activate
+(casmsim) ...
 ```
 
-You are now ready to start development on your project!
-The CI/CD pipeline will be triggered when you open a pull request, merge to main, or when you create a new release.
+## Quickstart: running the model
+There are three ways to run the model
 
-To finalize the set-up for publishing to PyPI, see [here](https://fpgmaas.github.io/cookiecutter-uv/features/publishing/#set-up-for-pypi).
-For activating the automatic documentation with MkDocs, see [here](https://fpgmaas.github.io/cookiecutter-uv/features/mkdocs/#enabling-the-documentation-on-github).
-To enable the code coverage reports, see [here](https://fpgmaas.github.io/cookiecutter-uv/features/codecov/).
+1. Run from the command line using `uv run`
+2. Run fromm the command line using virtualenv
+3. Run from
 
-## Releasing a new version
+To run (option 1):
 
+```bash
+% uv run mpirun -n 1 python -m casmsim.runner config/casmsim.yaml
+```
 
+To run with the virtual environment (option 2):
+
+```bash
+% source ./.venv/bin/activate
+(casmsim)
+(casmsim) mpirun -n 1 python -m casmsim.runner config/casmsim.yaml
+....
+(casmsim) deactivate
+%
+```
 
 ---
 
