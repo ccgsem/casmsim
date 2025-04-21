@@ -1,0 +1,52 @@
+site_name: casmsim
+repo_url: https://github.com/clinejc/casmsim
+site_url: https://clinejc.github.io/casmsim
+site_description: a PA Python framework for implementing agent-based models that simulate the dynamics of a synthetic population
+site_author: Jon C. Cline
+edit_uri: edit/main/docs/
+repo_name: clinejc/casmsim
+copyright: Maintained by <a href="https://clinejc.com">clinejc</a>.
+
+nav:
+  - Home: index.md
+  - Modules: modules.md
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: ["casmsim"]
+theme:
+  name: material
+  feature:
+    tabs: true
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: white
+      accent: deep orange
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: black
+      accent: deep orange
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  icon:
+    repo: fontawesome/brands/github
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/clinejc/casmsim
+    - icon: fontawesome/brands/python
+      link: https://pypi.org/project/casmsim
+
+markdown_extensions:
+  - toc:
+      permalink: true
+  - pymdownx.arithmatex:
+      generic: true
