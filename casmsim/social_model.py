@@ -68,7 +68,7 @@ class SocialModel:
         self.runner.schedule_repeating_event(1, 1, self.step)
         self.grid_resolution = grid_resolution
 
-        ds = xr.open_dataset("environment.nc")
+        ds = xr.open_dataset("data/environment.nc")
         self.env_var = "temperature"
         self.time_dim = ds.coords["time"].values
 

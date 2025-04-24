@@ -1,7 +1,11 @@
 #! /usr/bin/env bash
 
-# Install uv
-curl -LsSf https://astral.sh/uv/install.sh | sh
+# Initialize git if not already initialized
+if [ ! -d .git ]; then
+    git init
+    git config --global user.email "dev@example.com"
+    git config --global user.name "Dev Container"
+fi
 
 # Install Dependencies
 uv sync

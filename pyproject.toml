@@ -5,7 +5,7 @@ description = "a PA Python framework for implementing agent-based models that si
 authors = [{ name = "Jon C. Cline", email = "jon.c.cline@gmail.com" }]
 readme = "README.md"
 keywords = ['python']
-requires-python = ">=3.9,<4.0"
+requires-python = ">=3.12,<4.0"
 classifiers = [
     "Intended Audience :: Developers",
     "Programming Language :: Python",
@@ -19,10 +19,9 @@ classifiers = [
 ]
 dependencies = [
     "loguru>=0.7.3",
+    "numpy==1.26.4",
     "netcdf4>=1.7.2",
-    "rasterio>=1.4.3",
     "repast4py>=1.1.6",
-    "rioxarray>=0.15.0",
     "scipy>=1.13.1",
     "xarray>=2024.7.0",
 ]
