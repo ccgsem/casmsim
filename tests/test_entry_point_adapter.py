@@ -73,6 +73,14 @@ def test_resolve_adapter_raises_on_empty_params():
         resolve_adapter(None, {})
 
 
+def test_resolve_adapter_does_not_implicitly_select_a_casmsocial_adapter():
+    """Model packages, rather than casmsim, select their own integration adapter."""
+    import pytest
+
+    with pytest.raises(ValueError, match="runner.entry_point"):
+        resolve_adapter(None, {"model.name": "wake", "model.plugins": ["wake.plugin"]})
+
+
 # ---------------------------------------------------------------------------
 # Protocol conformance: ToyRunnerAdapter
 # ---------------------------------------------------------------------------

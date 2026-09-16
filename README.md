@@ -1,8 +1,8 @@
 # casmsim
 
-gRPC/Arrow Flight runner transport for [CASMSocial](https://github.com/ccgsem/casmsocial) agent-based models.
+gRPC/Arrow Flight runner transport for agent-based models.
 
-`casmsim` provides the loopback runner protocol that the CASMSocial control plane uses to launch, observe, and cancel simulation runs. It is distributed as a separate package so that non-CASMSocial frameworks (Repast4Py, XDevs, plain Python) can implement the `RunnerModelAdapter` protocol and run under the same control plane without taking a dependency on CASMSocial itself.
+`casmsim` provides a loopback runner protocol for launching, observing, and cancelling simulation runs. Model packages implement its `RunnerModelAdapter` protocol and supply an explicit `runner.entry_point`; `casmsim` has no dependency on a particular simulation framework.
 
 ## Architecture
 
@@ -12,9 +12,7 @@ control plane
     ▼
 casmsim.grpc_runner.SimulatorControlServicer
     │
-    ├─ casmsim.adapters.casmsocial.CasmPopAdapter   ← casmsocial models
-    ├─ casmsim.adapters.repast4py.Repast4PyAdapter  ← Repast4Py models
-    └─ <runner.entry_point>                         ← any RunnerModelAdapter
+    └─ <runner.entry_point>                         ← model-provided RunnerModelAdapter
     │
     ▼  Arrow Flight
 casmsim.flight_server / ObservationBroker
@@ -27,8 +25,6 @@ control plane observation stream
 
 ```bash
 pip install casmsim
-# with casmsocial model support:
-pip install "casmsim[casmsocial]"
 ```
 
 ## Protocols
@@ -65,4 +61,4 @@ bash scripts/regen_proto.sh
 
 MIT — see [LICENSE](LICENSE).
 
-> **Note:** This package was extracted from the `casmsocial` internal `casmsim` subpackage. The pre-extraction history is archived at [ccgsem/casmsim-pre-social](https://github.com/ccgsem/casmsim-pre-social).
+> **Note:** Model integrations belong in their respective model packages. For example, CASMSocial supplies its own runner adapter and injects it through `runner.entry_point`.
