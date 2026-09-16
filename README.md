@@ -1,77 +1,68 @@
 # casmsim
 
-[![Release](https://img.shields.io/github/v/release/clinejc/casmsim)](https://img.shields.io/github/v/release/clinejc/casmsim)
-[![Build status](https://img.shields.io/github/actions/workflow/status/clinejc/casmsim/main.yml?branch=main)](https://github.com/clinejc/casmsim/actions/workflows/main.yml?query=branch%3Amain)
-[![codecov](https://codecov.io/gh/clinejc/casmsim/branch/main/graph/badge.svg)](https://codecov.io/gh/clinejc/casmsim)
-[![Commit activity](https://img.shields.io/github/commit-activity/m/clinejc/casmsim)](https://img.shields.io/github/commit-activity/m/clinejc/casmsim)
-[![License](https://img.shields.io/github/license/clinejc/casmsim)](https://img.shields.io/github/license/clinejc/casmsim)
+gRPC/Arrow Flight runner transport for [CASMSocial](https://github.com/ccgsem/casmsocial) agent-based models.
 
-`casmsim` is a Python framework for implementing agent-based models that simulate the dynamics of a synthetic population
+`casmsim` provides the loopback runner protocol that the CASMSocial control plane uses to launch, observe, and cancel simulation runs. It is distributed as a separate package so that non-CASMSocial frameworks (Repast4Py, XDevs, plain Python) can implement the `RunnerModelAdapter` protocol and run under the same control plane without taking a dependency on CASMSocial itself.
 
-- **Github repository**: <https://github.com/clinejc/casmsim/>
-- **Documentation** <https://clinejc.github.io/casmsim/>
+## Architecture
+
+```
+control plane
+    │  gRPC (casm.runner.v1)
+    ▼
+casmsim.grpc_runner.SimulatorControlServicer
+    │
+    ├─ casmsim.adapters.casmsocial.CasmPopAdapter   ← casmsocial models
+    ├─ casmsim.adapters.repast4py.Repast4PyAdapter  ← Repast4Py models
+    └─ <runner.entry_point>                         ← any RunnerModelAdapter
+    │
+    ▼  Arrow Flight
+casmsim.flight_server / ObservationBroker
+    │
+    ▼
+control plane observation stream
+```
 
 ## Installation
 
-Install the environment with
-
 ```bash
-export CC=mpicxx; export CXX=mpicxx
-make install
+pip install casmsim
+# with casmsocial model support:
+pip install "casmsim[casmsocial]"
 ```
 
-To build a Docker image for `casmsim`:
+## Protocols
 
-* on the MITRE network
+Implement `casmsim.protocols.RunnerModelAdapter` to plug any model into the runner:
 
-    ```bash
-    docker build -t casmsim . -f Dockerfile-mitre
-    ```
+```python
+from casmsim.protocols import RunnerModelAdapter, ObservationAdapter
+from casmsim.run_state import RunState
 
-* off the MITRE network
-
-    ```bash
-    docker build -t casmsim . -f Dockerfile
-    ```
-
-## Launch the modeling environment:
-First create the virtual environments with
-
-```bash
-% python -m venv .venv
+class MyModelAdapter(RunnerModelAdapter):
+    def start(self, run_id: str, config: dict, observation: ObservationAdapter) -> None:
+        ...
+    def cancel(self) -> None:
+        ...
 ```
 
-To launch the virtualenv, run
+Register via `pyproject.toml` entry point:
 
-```bash
-% source ./.venv/bin/activate
-(casmsim) ...
+```toml
+[project.entry-points."casmsim.adapters"]
+my_model = "my_package.adapter:MyModelAdapter"
 ```
 
-## Quickstart: running the model
-There are three ways to run the model
+Then submit a run with `runner.entry_point = "my_package.adapter:MyModelAdapter"` in the config JSON.
 
-1. Run from the command line using `uv run`
-2. Run fromm the command line using virtualenv
-3. Run from
-
-To run (option 1):
+## Proto regeneration
 
 ```bash
-% uv run mpirun -n 1 python -m casmsim.runner config/casmsim.yaml
+bash scripts/regen_proto.sh
 ```
 
-To run with the virtual environment (option 2):
+## License
 
-```bash
-% source ./.venv/bin/activate
-(casmsim)
-(casmsim) mpirun -n 1 python -m casmsim.runner config/casmsim.yaml
-....
-(casmsim) deactivate
-%
-```
+MIT — see [LICENSE](LICENSE).
 
----
-
-Repository initiated with [fpgmaas/cookiecutter-uv](https://github.com/fpgmaas/cookiecutter-uv).
+> **Note:** This package was extracted from the `casmsocial` internal `casmsim` subpackage. The pre-extraction history is archived at [ccgsem/casmsim-pre-social](https://github.com/ccgsem/casmsim-pre-social).

@@ -1,5 +1,1 @@
-from casmsim.foo import foo
-
-
-def test_foo():
-    assert foo("foo") == "foo"
+"""Placeholder removed — see test_protocol_conformance.py and siblings."""
