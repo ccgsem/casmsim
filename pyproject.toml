@@ -1,120 +1,94 @@
 [project]
 name = "casmsim"
-version = "0.0.1"
-description = "a PA Python framework for implementing agent-based models that simulate the dynamics of a synthetic population"
-authors = [{ name = "Jon C. Cline", email = "jon.c.cline@gmail.com" }]
+version = "1.0.0"
+description = "gRPC/Arrow Flight runner transport for CASMSocial agent-based models"
+authors = [{ name = "Jon C. Cline", email = "jcline@mitre.org" }]
 readme = "README.md"
-keywords = ['python']
-requires-python = ">=3.9,<4.0"
+license = "MIT"
+keywords = ["abm", "grpc", "arrow", "casmsocial", "simulation"]
+requires-python = ">=3.10,<3.14"
 classifiers = [
     "Intended Audience :: Developers",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Scientific/Engineering",
 ]
 dependencies = [
-    "loguru>=0.7.3",
-    "netcdf4>=1.7.2",
-    "rasterio>=1.4.3",
-    "repast4py>=1.1.6",
-    "rioxarray>=0.15.0",
-    "scipy>=1.13.1",
-    "xarray>=2024.7.0",
+    "grpcio>=1.83.0",
+    "protobuf>=7.35.1",
+    "pyarrow>=24.0.0",
 ]
 
+[project.optional-dependencies]
+# Install to use the CasmPopAdapter (wraps casmsocial CasmPop models).
+# casmsocial itself is not declared here because casmsim must be importable
+# without it — the adapter does a lazy import at run time.
+casmsocial = ["casmsocial>=3.0.0"]
+
 [project.urls]
-Homepage = "https://clinejc.github.io/casmsim/"
-Repository = "https://github.com/clinejc/casmsim"
-Documentation = "https://clinejc.github.io/casmsim/"
+Homepage = "https://ccgsem.github.io/casmsim/"
+Repository = "https://github.com/ccgsem/casmsim"
+Documentation = "https://ccgsem.github.io/casmsim/"
 
 [dependency-groups]
 dev = [
-    "pytest>=7.2.0",
-    "pre-commit>=2.20.0",
-    "tox-uv>=1.11.3",
-    "deptry>=0.23.0",
-    "mypy>=0.991",
-    "ruff>=0.11.5",
-    "mkdocs>=1.4.2",
-    "mkdocs-material>=8.5.10",
-    "mkdocstrings[python]>=0.26.1",
-    "black>=25.1.0",
+    "grpcio-tools>=1.83.0",
+    "pytest>=9.1.0",
+    "black>=26.5.1",
+    "isort>=8.0.1",
+    "ruff>=0.15.17",
+    "mypy>=2.1.0",
+    "pre-commit>=4.6.0",
+    "tox-uv>=1.35.2",
 ]
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-[tool.setuptools]
-py-modules = ["casmsim"]
+[tool.hatch.build.targets.wheel]
+packages = ["casmsim", "proto", "scripts"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.black]
+line-length = 120
+target-version = ["py310", "py311", "py312", "py313"]
+
+[tool.isort]
+profile = "black"
+line_length = 120
+known_first_party = ["casmsim"]
+combine_as_imports = true
 
 [tool.mypy]
 files = ["casmsim"]
 disallow_untyped_defs = true
-disallow_any_unimported = true
 no_implicit_optional = true
 check_untyped_defs = true
 warn_return_any = true
 warn_unused_ignores = true
 show_error_codes = true
 
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-
 [tool.ruff]
-target-version = "py39"
+target-version = "py310"
 line-length = 120
 fix = true
+extend-exclude = ["casmsim/proto"]
 
 [tool.ruff.lint]
-select = [
-    # flake8-2020
-    "YTT",
-    # flake8-bandit
-    "S",
-    # flake8-bugbear
-    "B",
-    # flake8-builtins
-    "A",
-    # flake8-comprehensions
-    "C4",
-    # flake8-debugger
-    "T10",
-    # flake8-simplify
-    "SIM",
-    # isort
-    "I",
-    # mccabe
-    "C90",
-    # pycodestyle
-    "E", "W",
-    # pyflakes
-    "F",
-    # pygrep-hooks
-    "PGH",
-    # pyupgrade
-    "UP",
-    # ruff
-    "RUF",
-    # tryceratops
-    "TRY",
-]
-ignore = [
-    # LineTooLong
-    "E501",
-    # DoNotAssignLambda
-    "E731",
-]
+select = ["E", "W", "F", "I", "UP"]
+ignore = ["E501", "E731"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["S101"]
 
-[tool.ruff.format]
-preview = true
-
-
+[tool.ruff.lint.isort]
+combine-as-imports = true
+known-first-party = ["casmsim"]
