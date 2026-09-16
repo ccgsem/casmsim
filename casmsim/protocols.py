@@ -56,7 +56,7 @@ class RunnerModelAdapter(Protocol):
     """Protocol that any simulation model must satisfy to run inside casmsim.
 
     Implementations may wrap:
-      - A casmsocial CasmPop model (via ``casmsim.adapters.casmsocial``).
+      - A casmsocial CasmPop model (via ``casmsocial.adapters.runner:CasmPopAdapter``).
       - A standalone repast4py model (via ``casmsim.adapters.repast4py``).
       - Any other simulation engine.
 

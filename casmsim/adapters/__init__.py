@@ -9,11 +9,6 @@ Bundled adapters
 :class:`~casmsim.adapters.toy.ToyRunnerAdapter`
     Minimal in-process adapter for testing (no MPI or repast4py required).
 
-:class:`~casmsim.adapters.casmsocial.CasmPopAdapter`
-    Wraps casmsocial ``CasmPop`` models via the ``Models`` factory.
-    Activated automatically when ``model.plugins`` is present in params;
-    requires casmsocial to be installed.
-
 External adapters
 -----------------
 External model packages implement ``RunnerModelAdapter`` themselves and

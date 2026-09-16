@@ -6,17 +6,14 @@ Contains two layers:
    transport-agnostic; no knowledge of any simulation engine.
 
 2. **Model resolution layer** (``run_submitted_model``, ``resolve_adapter``) —
-   resolves the right ``RunnerModelAdapter`` from submitted run params:
+   resolves the right ``RunnerModelAdapter`` from submitted run params via
+   ``runner.entry_point`` (``module:Class``).  casmsim carries no reference to
+   any model package; launchers (e.g. ``casmsocial.grpc_runner``) inject the
+   appropriate entry_point before forwarding config_json.
 
-   * ``runner.entry_point`` present →
-     dynamic ``module:Class`` import, constructed as ``Cls(comm, params)``.
-   * ``model.plugins`` present →
-     delegates to :class:`casmsim.adapters.casmsocial.CasmPopAdapter`.
-   * Neither present → ``ValueError``.
-
-``casmsocial.grpc_runner`` delegates ``run_submitted_model`` here so that the
-casmsocial entry point can be simplified to a thin launcher that forwards its
-``start_runner`` wiring unchanged.
+``casmsocial.grpc_runner`` wraps ``run_submitted_model`` to inject
+``runner.entry_point = "casmsocial.adapters.runner:CasmPopAdapter"`` for
+``model.plugins`` / ``model.name`` runs before forwarding here.
 """
 
 from __future__ import annotations
@@ -197,11 +194,14 @@ def _import_entry_point(entry_point: str):
 def resolve_adapter(comm, params: dict):  # noqa: ANN001
     """Return an instantiated ``RunnerModelAdapter`` for the given params.
 
-    Resolution order:
+    Resolution: ``runner.entry_point`` → dynamic ``module:Class`` import.
 
-    1. ``runner.entry_point`` → dynamic ``module:Class`` import.
-    2. ``model.plugins`` → :class:`casmsim.adapters.casmsocial.CasmPopAdapter`.
-    3. Neither → ``ValueError``.
+    The caller is responsible for injecting ``runner.entry_point`` before
+    calling this function.  For casmsocial models the launcher sets::
+
+        params["runner.entry_point"] = "casmsocial.adapters.runner:CasmPopAdapter"
+
+    casmsim itself carries no reference to casmsocial or any other model package.
 
     Args:
         comm:   MPI communicator (``mpi4py.MPI.Comm`` or compatible).
@@ -212,14 +212,11 @@ def resolve_adapter(comm, params: dict):  # noqa: ANN001
         cls = _import_entry_point(entry_point)
         return cls(comm, params)
 
-    if params.get("model.plugins") or params.get("model.name"):
-        from casmsim.adapters.casmsocial import CasmPopAdapter
-        return CasmPopAdapter(comm, params)
-
     raise ValueError(
-        "Cannot resolve a RunnerModelAdapter: params must contain either "
-        "'runner.entry_point' (module:Class) or 'model.plugins' / 'model.name' "
-        "(casmsocial Models factory path)."
+        "Cannot resolve a RunnerModelAdapter: params must contain "
+        "'runner.entry_point' (module:Class).  "
+        "For casmsocial models the launcher injects "
+        "'casmsocial.adapters.runner:CasmPopAdapter' automatically."
     )
 
 
