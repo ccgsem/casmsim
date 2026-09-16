@@ -1,11 +1,11 @@
 [project]
 name = "casmsim"
 version = "1.0.0"
-description = "gRPC/Arrow Flight runner transport for CASMSocial agent-based models"
+description = "gRPC/Arrow Flight runner transport for agent-based models"
 authors = [{ name = "Jon C. Cline", email = "jcline@mitre.org" }]
 readme = "README.md"
 license = "MIT"
-keywords = ["abm", "grpc", "arrow", "casmsocial", "simulation"]
+keywords = ["abm", "grpc", "arrow", "simulation", "runner"]
 requires-python = ">=3.10,<3.14"
 classifiers = [
     "Intended Audience :: Developers",
@@ -23,12 +23,6 @@ dependencies = [
     "protobuf>=7.35.1",
     "pyarrow>=24.0.0",
 ]
-
-[project.optional-dependencies]
-# Install to use the CasmPopAdapter (wraps casmsocial CasmPop models).
-# casmsocial itself is not declared here because casmsim must be importable
-# without it — the adapter does a lazy import at run time.
-casmsocial = ["casmsocial>=3.0.0"]
 
 [project.urls]
 Homepage = "https://ccgsem.github.io/casmsim/"
