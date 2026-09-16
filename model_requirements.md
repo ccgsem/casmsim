@@ -27,7 +27,7 @@
 - Both use `BorderType.Sticky` and are initialized from environment bounds
 
 ## Environment Input
-- Reads `temperature` data from a NetCDF file `environment.nc`
+- Any temperature input must be supplied by the deploying model; `casmsim` does not distribute NetCDF environment data.
 - Updates every simulation tick using hourly time steps
 - Temperature values are assigned to person agents based on location
 
@@ -70,4 +70,3 @@ mpirun -n 4 python social_model.py -pf parameters.yml
 
 ---
 For more details, see the source file `social_model.py`.
-
