@@ -47,9 +47,12 @@ def secure_run_directory(path: Path) -> None:
 class SimulatorControlServicer(pb2_grpc.SimulatorControlServicer):
     """Atomically accepts one run and exposes its broker-backed observations."""
 
-    def __init__(self, broker: ObservationBroker, start_run: Callable[[str, bytes], None]) -> None:
+    def __init__(self, broker: ObservationBroker, start_run: Callable[[str, bytes], None],
+                 cancel_run: Callable[[], bool | None] | None = None) -> None:
         self._broker = broker
         self._start_run = start_run
+        self._cancel_run = cancel_run
+        self._cancel_requested = False
         self._lock = Lock()
         self._run_id: str | None = None
         self._state = pb2.RUN_STATE_INITIALIZING
@@ -98,18 +101,28 @@ class SimulatorControlServicer(pb2_grpc.SimulatorControlServicer):
             return
         with self._lock:
             if self._state == pb2.RUN_STATE_RUNNING:
-                self._state = pb2.RUN_STATE_COMPLETED
+                self._state = pb2.RUN_STATE_CANCELLED if self._cancel_requested else pb2.RUN_STATE_COMPLETED
+                self._status_message = "Cancelled at model boundary" if self._cancel_requested else ""
         self._broker.close()
 
     def Cancel(self, request, context):
         """Cooperative cancellation — acknowledged only if a cancel hook is wired up.
 
-        The base implementation returns ``acknowledged=False``.  Adapters that
-        implement ``RunnerModelAdapter.cancel()`` override or wrap this to set
-        the cancellation flag and return ``acknowledged=True``.
+        Without a hook returns ``acknowledged=False``. The hook must promptly
+        signal the worker, not wait for it. State remains Running until the
+        worker returns, including output flush; exceptions still report Failed.
         """
         with self._lock:
-            return pb2.CancelResponse(acknowledged=False)
+            if request.run_id != self._run_id:
+                context.abort(grpc.StatusCode.NOT_FOUND, "unknown run_id")
+            if self._state != pb2.RUN_STATE_RUNNING or self._cancel_run is None:
+                return pb2.CancelResponse(acknowledged=False)
+            if not self._cancel_requested:
+                if self._cancel_run() is False:
+                    return pb2.CancelResponse(acknowledged=False)
+                self._cancel_requested = True
+                self._status_message = "Cancellation requested; waiting for model shutdown"
+            return pb2.CancelResponse(acknowledged=True)
 
     def GetState(self, request, context):
         with self._lock:
@@ -138,11 +151,12 @@ class SimulatorControlServicer(pb2_grpc.SimulatorControlServicer):
             yield pb2.ObsBatch(channel=batch.channel, tick=batch.batch_id, arrow_ipc=sink.getvalue().to_pybytes())
 
 
-def start_control_server(run_dir: Path, broker: ObservationBroker, start_run: Callable[[str, bytes], None]):
+def start_control_server(run_dir: Path, broker: ObservationBroker, start_run: Callable[[str, bytes], None],
+                         *, cancel_run: Callable[[], bool | None] | None = None):
     """Start a loopback-only control server and write its endpoint manifest."""
     secure_run_directory(run_dir)
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=4))
-    pb2_grpc.add_SimulatorControlServicer_to_server(SimulatorControlServicer(broker, start_run), server)
+    pb2_grpc.add_SimulatorControlServicer_to_server(SimulatorControlServicer(broker, start_run, cancel_run), server)
     port = server.add_insecure_port("127.0.0.1:0")
     if not port:
         raise RuntimeError("could not bind loopback gRPC control listener")
