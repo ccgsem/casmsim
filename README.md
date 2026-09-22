@@ -35,11 +35,10 @@ Implement `casmsim.protocols.RunnerModelAdapter` to plug any model into the runn
 from casmsim.protocols import RunnerModelAdapter, ObservationAdapter
 from casmsim.run_state import RunState
 
+
 class MyModelAdapter(RunnerModelAdapter):
-    def start(self, run_id: str, config: dict, observation: ObservationAdapter) -> None:
-        ...
-    def cancel(self) -> None:
-        ...
+    def start(self, run_id: str, config: dict, observation: ObservationAdapter) -> None: ...
+    def cancel(self) -> None: ...
 ```
 
 Register via `pyproject.toml` entry point:

@@ -67,11 +67,12 @@ class TestCooperativeCancelToken:
 
     def test_thread_safety(self):
         import time
+
         token = CooperativeCancelToken()
         results = []
 
         def setter():
-            time.sleep(0.01)   # let checker start first
+            time.sleep(0.01)  # let checker start first
             token.request()
 
         def checker():

@@ -63,7 +63,7 @@ class ObservationBatch:
 
     @property
     def size_bytes(self) -> int:
-        return self.table.nbytes
+        return int(self.table.nbytes)
 
 
 @dataclass(frozen=True)

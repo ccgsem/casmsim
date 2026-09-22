@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Iterator
 from pathlib import Path
 
 import pyarrow as pa
@@ -24,7 +25,7 @@ class BrokerFlightServer(flight.FlightServerBase):
     def _channel(descriptor: flight.FlightDescriptor) -> str:
         if descriptor.path is None or len(descriptor.path) != 1:
             raise flight.FlightServerError("Flight descriptor path must contain one channel name")
-        return descriptor.path[0].decode("utf-8")
+        return str(descriptor.path[0].decode("utf-8"))
 
     def _table(self, channel: str) -> pa.Table:
         try:
@@ -41,20 +42,28 @@ class BrokerFlightServer(flight.FlightServerBase):
         endpoint = flight.FlightEndpoint(flight.Ticket(channel.encode("utf-8")), [])
         return flight.FlightInfo(table.schema, descriptor, [endpoint], table.num_rows, table.nbytes)
 
-    def list_flights(self, context, criteria):
+    def list_flights(self, context: flight.ServerCallContext, criteria: bytes) -> Iterator[flight.FlightInfo]:
         for channel in self._broker.channels():
             try:
                 yield self._info(channel)
             except flight.FlightServerError:
                 continue
 
-    def get_flight_info(self, context, descriptor: flight.FlightDescriptor) -> flight.FlightInfo:
+    def get_flight_info(
+        self, context: flight.ServerCallContext, descriptor: flight.FlightDescriptor
+    ) -> flight.FlightInfo:
         return self._info(self._channel(descriptor))
 
-    def do_get(self, context, ticket: flight.Ticket) -> flight.RecordBatchStream:
+    def do_get(self, context: flight.ServerCallContext, ticket: flight.Ticket) -> flight.RecordBatchStream:
         return flight.RecordBatchStream(self._table(ticket.ticket.decode("utf-8")))
 
-    def do_put(self, context, descriptor, reader, writer) -> None:
+    def do_put(
+        self,
+        context: flight.ServerCallContext,
+        descriptor: flight.FlightDescriptor,
+        reader: flight.MetadataRecordBatchReader,
+        writer: flight.FlightMetadataWriter,
+    ) -> None:
         raise flight.FlightServerError("BrokerFlightServer is read-only")
 
 

@@ -5,7 +5,4 @@ CasmPopAdapter now lives in casmsocial:
     from casmsocial.adapters.runner import CasmPopAdapter
 """
 
-raise ImportError(
-    "casmsim.adapters.casmsocial has been removed. "
-    "Import from casmsocial.adapters.runner instead."
-)
+raise ImportError("casmsim.adapters.casmsocial has been removed. Import from casmsocial.adapters.runner instead.")

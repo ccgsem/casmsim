@@ -25,6 +25,7 @@ from collections.abc import Callable, Iterator
 from concurrent import futures
 from pathlib import Path
 from threading import Lock, Thread
+from typing import Any, cast
 
 import grpc
 import pyarrow as pa
@@ -32,6 +33,7 @@ from pyarrow import ipc
 
 from casmsim.observation_broker import ObservationBroker, ObservationCursorExpiredError
 from casmsim.proto import casm_runner_pb2 as pb2, casm_runner_pb2_grpc as pb2_grpc
+from casmsim.protocols import RunnerModelAdapter
 
 ENDPOINT_FILENAME = "runner_endpoints.json"
 
@@ -47,16 +49,23 @@ def secure_run_directory(path: Path) -> None:
 class SimulatorControlServicer(pb2_grpc.SimulatorControlServicer):
     """Atomically accepts one run and exposes its broker-backed observations."""
 
-    def __init__(self, broker: ObservationBroker, start_run: Callable[[str, bytes], None]) -> None:
+    def __init__(
+        self,
+        broker: ObservationBroker,
+        start_run: Callable[[str, bytes], None],
+        cancel_run: Callable[[], bool | None] | None = None,
+    ) -> None:
         self._broker = broker
         self._start_run = start_run
+        self._cancel_run = cancel_run
+        self._cancel_requested = False
         self._lock = Lock()
         self._run_id: str | None = None
         self._state = pb2.RUN_STATE_INITIALIZING
         self._status_message: str = ""
         self._worker: Thread | None = None
 
-    def Start(self, request, context):
+    def Start(self, request: pb2.StartRequest, context: grpc.ServicerContext) -> pb2.StartResponse:
         if not request.run_id or not request.config_json:
             context.abort(grpc.StatusCode.INVALID_ARGUMENT, "run_id and config_json are required")
         with self._lock:
@@ -82,36 +91,43 @@ class SimulatorControlServicer(pb2_grpc.SimulatorControlServicer):
         """
         import logging
         import traceback
+
         try:
             self._start_run(run_id, config_json)
         except Exception as exc:
-            logging.getLogger(__name__).error(
-                "runner failed for run_id=%s\n%s", run_id, traceback.format_exc()
-            )
+            logging.getLogger(__name__).error("runner failed for run_id=%s\n%s", run_id, traceback.format_exc())
             with self._lock:
                 if self._state != pb2.RUN_STATE_CANCELLED:
                     self._state = pb2.RUN_STATE_FAILED
-                    self._status_message = (
-                        f"Run failed ({type(exc).__name__}); see runner stderr.log."
-                    )
+                    self._status_message = f"Run failed ({type(exc).__name__}); see runner stderr.log."
             self._broker.close()
             return
         with self._lock:
             if self._state == pb2.RUN_STATE_RUNNING:
-                self._state = pb2.RUN_STATE_COMPLETED
+                self._state = pb2.RUN_STATE_CANCELLED if self._cancel_requested else pb2.RUN_STATE_COMPLETED
+                self._status_message = "Cancelled at model boundary" if self._cancel_requested else ""
         self._broker.close()
 
-    def Cancel(self, request, context):
+    def Cancel(self, request: pb2.CancelRequest, context: grpc.ServicerContext) -> pb2.CancelResponse:
         """Cooperative cancellation — acknowledged only if a cancel hook is wired up.
 
-        The base implementation returns ``acknowledged=False``.  Adapters that
-        implement ``RunnerModelAdapter.cancel()`` override or wrap this to set
-        the cancellation flag and return ``acknowledged=True``.
+        Without a hook returns ``acknowledged=False``. The hook must promptly
+        signal the worker, not wait for it. State remains Running until the
+        worker returns, including output flush; exceptions still report Failed.
         """
         with self._lock:
-            return pb2.CancelResponse(acknowledged=False)
+            if request.run_id != self._run_id:
+                context.abort(grpc.StatusCode.NOT_FOUND, "unknown run_id")
+            if self._state != pb2.RUN_STATE_RUNNING or self._cancel_run is None:
+                return pb2.CancelResponse(acknowledged=False)
+            if not self._cancel_requested:
+                if self._cancel_run() is False:
+                    return pb2.CancelResponse(acknowledged=False)
+                self._cancel_requested = True
+                self._status_message = "Cancellation requested; waiting for model shutdown"
+            return pb2.CancelResponse(acknowledged=True)
 
-    def GetState(self, request, context):
+    def GetState(self, request: pb2.GetStateRequest, context: grpc.ServicerContext) -> pb2.StateResponse:
         with self._lock:
             if request.run_id != self._run_id:
                 context.abort(grpc.StatusCode.NOT_FOUND, "unknown run_id")
@@ -121,7 +137,7 @@ class SimulatorControlServicer(pb2_grpc.SimulatorControlServicer):
                 status_message=self._status_message,
             )
 
-    def StreamObs(self, request, context) -> Iterator[pb2.ObsBatch]:
+    def StreamObs(self, request: pb2.StreamObsRequest, context: grpc.ServicerContext) -> Iterator[pb2.ObsBatch]:
         with self._lock:
             if request.run_id != self._run_id:
                 context.abort(grpc.StatusCode.NOT_FOUND, "unknown run_id")
@@ -138,11 +154,17 @@ class SimulatorControlServicer(pb2_grpc.SimulatorControlServicer):
             yield pb2.ObsBatch(channel=batch.channel, tick=batch.batch_id, arrow_ipc=sink.getvalue().to_pybytes())
 
 
-def start_control_server(run_dir: Path, broker: ObservationBroker, start_run: Callable[[str, bytes], None]):
+def start_control_server(
+    run_dir: Path,
+    broker: ObservationBroker,
+    start_run: Callable[[str, bytes], None],
+    *,
+    cancel_run: Callable[[], bool | None] | None = None,
+) -> grpc.Server:
     """Start a loopback-only control server and write its endpoint manifest."""
     secure_run_directory(run_dir)
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=4))
-    pb2_grpc.add_SimulatorControlServicer_to_server(SimulatorControlServicer(broker, start_run), server)
+    pb2_grpc.add_SimulatorControlServicer_to_server(SimulatorControlServicer(broker, start_run, cancel_run), server)
     port = server.add_insecure_port("127.0.0.1:0")
     if not port:
         raise RuntimeError("could not bind loopback gRPC control listener")
@@ -177,12 +199,10 @@ class _BrokerObservationAdapter:
         self._broker.close()
 
 
-def _import_entry_point(entry_point: str):
+def _import_entry_point(entry_point: str) -> Any:
     """Resolve ``"module.path:ClassName"`` to the class object."""
     if ":" not in entry_point:
-        raise ValueError(
-            f"runner.entry_point must be in 'module:Class' form, got: {entry_point!r}"
-        )
+        raise ValueError(f"runner.entry_point must be in 'module:Class' form, got: {entry_point!r}")
     module_path, class_name = entry_point.rsplit(":", 1)
     module = importlib.import_module(module_path)
     cls = getattr(module, class_name, None)
@@ -191,7 +211,7 @@ def _import_entry_point(entry_point: str):
     return cls
 
 
-def resolve_adapter(comm, params: dict):  # noqa: ANN001
+def resolve_adapter(comm: Any, params: dict) -> RunnerModelAdapter:
     """Return an instantiated ``RunnerModelAdapter`` for the given params.
 
     Resolution: ``runner.entry_point`` → dynamic ``module:Class`` import.
@@ -210,7 +230,7 @@ def resolve_adapter(comm, params: dict):  # noqa: ANN001
     entry_point = params.get("runner.entry_point")
     if entry_point:
         cls = _import_entry_point(entry_point)
-        return cls(comm, params)
+        return cast(RunnerModelAdapter, cls(comm, params))
 
     raise ValueError(
         "Cannot resolve a RunnerModelAdapter: params must contain "
@@ -232,6 +252,7 @@ def run_submitted_model(run_id: str, config_json: bytes, broker: ObservationBrok
     """
     try:
         from mpi4py import MPI as _MPI
+
         comm = _MPI.COMM_WORLD
     except ImportError:
         # mpi4py is optional when the adapter doesn't need MPI

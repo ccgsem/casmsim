@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import threading
 import time
+from typing import Any
 
 import pyarrow as pa
 
@@ -36,7 +37,7 @@ class ToyRunnerAdapter:
         toy.tick_delay (float): Seconds to sleep per tick (for concurrency tests). Default: 0.
     """
 
-    def __init__(self, comm, params: dict) -> None:  # noqa: ANN001
+    def __init__(self, comm: Any, params: dict) -> None:
         self._ticks: int = int(params.get("toy.ticks", 3))
         self._channel: str = str(params.get("toy.channel", "toy_output"))
         self._tick_delay: float = float(params.get("toy.tick_delay", 0.0))
@@ -69,7 +70,7 @@ class ToyRunnerAdapter:
                         return
                     self._current_tick = tick
 
-                table = pa.table({"tick": [tick], "value": [float(tick ** 2)]})
+                table = pa.table({"tick": [tick], "value": [float(tick**2)]})
                 if self._observer:
                     self._observer.publish(self._channel, table)
 

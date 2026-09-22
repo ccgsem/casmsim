@@ -49,7 +49,8 @@ Register as an entry point by subclassing and setting ``MODEL_CLASS``::
 from __future__ import annotations
 
 import threading
-from typing import TYPE_CHECKING, Any, Callable
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
 import pyarrow as pa
 
@@ -90,9 +91,7 @@ class Repast4pyAdapter:
     ) -> None:
         if model is None:
             if self.MODEL_CLASS is None:
-                raise TypeError(
-                    "Either pass model= or set MODEL_CLASS on the subclass."
-                )
+                raise TypeError("Either pass model= or set MODEL_CLASS on the subclass.")
             model = self.MODEL_CLASS(comm, params)
 
         self._comm = comm

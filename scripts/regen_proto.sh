@@ -14,6 +14,7 @@ OUT="casmsim/proto"
 python -m grpc_tools.protoc \
     --proto_path="$PROTO_SRC" \
     --python_out="$OUT" \
+    --pyi_out="$OUT" \
     --grpc_python_out="$OUT" \
     casm_runner.proto
 
@@ -24,5 +25,6 @@ sed -i 's/^import casm_runner_pb2/from casmsim.proto import casm_runner_pb2/' \
 
 echo "Regenerated:"
 echo "  $OUT/casm_runner_pb2.py"
+echo "  $OUT/casm_runner_pb2.pyi"
 echo "  $OUT/casm_runner_pb2_grpc.py"
-echo "Commit both files together with any .proto changes."
+echo "Commit generated Python and typing files together with any .proto changes."

@@ -39,6 +39,7 @@ def get_comm() -> Any | None:
     """Return ``MPI.COMM_WORLD`` or ``None`` if mpi4py is unavailable."""
     try:
         from mpi4py import MPI  # noqa: PLC0415
+
         return MPI.COMM_WORLD
     except ImportError:
         return None
