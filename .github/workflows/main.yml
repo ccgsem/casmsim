@@ -29,7 +29,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
       fail-fast: false
     defaults:
       run:
@@ -44,10 +44,10 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Run tests
-        run: uv run python -m pytest tests 
+        run: uv run --no-sync python -m pytest tests
 
       - name: Check typing
-        run: uv run mypy
+        run: uv run --no-sync mypy
 
 
 
@@ -61,4 +61,4 @@ jobs:
         uses: ./.github/actions/setup-python-env
 
       - name: Check if documentation can be built
-        run: uv run mkdocs build -s
+        run: uv run --no-sync mkdocs build -s

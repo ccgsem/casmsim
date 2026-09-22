@@ -9,9 +9,11 @@ from casmsim.proto import casm_runner_pb2 as pb
 def test_cancel_waits_for_worker_flush_and_is_idempotent():
     entered, release = Event(), Event()
     hook = Mock()
+
     def worker(run_id, config):
         entered.set()
         assert release.wait(5)
+
     broker = ObservationBroker()
     server = SimulatorControlServicer(broker, worker, hook)
     context = Mock()

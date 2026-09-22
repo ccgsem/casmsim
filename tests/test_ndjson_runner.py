@@ -12,14 +12,10 @@ from __future__ import annotations
 
 import io
 import json
-import os
 import signal
-import threading
 import time
 
-import pytest
-
-from casmsim.ndjson_runner import EXIT_BY_OUTCOME, NdjsonRunnerBase, PROTOCOL_VERSION
+from casmsim.ndjson_runner import EXIT_BY_OUTCOME, PROTOCOL_VERSION, NdjsonRunnerBase
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -90,7 +86,6 @@ class _CancelCheckRunner(NdjsonRunnerBase):
 
 def _run(runner_cls, request_json: str | None = None, artifact_root: str = "/tmp/artifacts"):
     out = io.StringIO()
-    import sys
     from unittest.mock import patch
 
     req = request_json or _make_request(artifact_root=artifact_root)

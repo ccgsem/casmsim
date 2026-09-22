@@ -50,7 +50,8 @@ import signal
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Literal, TextIO
+from types import FrameType
+from typing import Any, Literal, TextIO
 
 ObservationFormat = Literal["arrow_ipc_file", "parquet"]
 DiagnosticLevel = Literal["info", "warning", "error"]
@@ -204,7 +205,7 @@ class NdjsonRunnerBase:
         # Install cooperative SIGTERM handler
         original_sigterm = signal.getsignal(signal.SIGTERM)
 
-        def _handle_sigterm(signum, frame):  # noqa: ANN001
+        def _handle_sigterm(signum: int, frame: FrameType | None) -> None:
             self._cancelled = True
             signal.signal(signal.SIGTERM, original_sigterm)
 
@@ -241,7 +242,7 @@ class NdjsonRunnerBase:
     # Internal
     # ------------------------------------------------------------------
 
-    def _emit(self, **fields) -> None:
+    def _emit(self, **fields: Any) -> None:
         """Serialize and write one NDJSON event to the output stream."""
         event = {
             "protocol_version": PROTOCOL_VERSION,

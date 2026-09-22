@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import MagicMock, call
+from unittest.mock import MagicMock
 
 import pyarrow as pa
 import pytest
 
 from casmsim.adapters.repast4py import Repast4pyAdapter
 from casmsim.run_state import RunState
-
 
 # ---------------------------------------------------------------------------
 # Minimal fake repast4py schedule
@@ -149,7 +148,7 @@ class TestCancellation:
                 result = super().execute()
                 ticks_run.append(self._executed)
                 if self._executed == 3:
-                    self._adapter_ref.cancel()   # trigger cancel mid-run
+                    self._adapter_ref.cancel()  # trigger cancel mid-run
                 return result
 
         adapter = Repast4pyAdapter.__new__(Repast4pyAdapter)

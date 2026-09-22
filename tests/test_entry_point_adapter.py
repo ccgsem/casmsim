@@ -21,10 +21,9 @@ from casmsim.grpc_runner import (
     start_control_server,
 )
 from casmsim.observation_broker import ObservationBroker
-from casmsim.protocols import ObservationAdapter, RunnerModelAdapter
 from casmsim.proto import casm_runner_pb2 as pb2, casm_runner_pb2_grpc as pb2_grpc
+from casmsim.protocols import ObservationAdapter, RunnerModelAdapter
 from casmsim.run_state import RunState
-
 
 # ---------------------------------------------------------------------------
 # Unit tests: resolve_adapter

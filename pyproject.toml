@@ -39,6 +39,15 @@ dev = [
     "mypy>=2.1.0",
     "pre-commit>=4.6.0",
     "tox-uv>=1.35.2",
+    "deptry>=0.23.0",
+    "types-protobuf",
+    "types-grpcio",
+    "tomli>=2; python_version < '3.11'",
+]
+docs = [
+    "mkdocs>=1.6",
+    "mkdocs-material>=9.6",
+    "mkdocstrings[python]>=0.26.1",
 ]
 
 [build-system]
@@ -69,6 +78,25 @@ check_untyped_defs = true
 warn_return_any = true
 warn_unused_ignores = true
 show_error_codes = true
+
+# Arrow ships no typing marker; MPI is supplied by model environments, not
+# the transport runtime. Keep strict checking for our own handwritten code.
+[[tool.mypy.overrides]]
+module = ["pyarrow.*", "mpi4py.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["casmsim.proto.casm_runner_pb2_grpc"]
+ignore_errors = true
+
+[tool.deptry]
+extend_exclude = ["casmsim/proto"]
+
+[tool.deptry.per_rule_ignores]
+# Optional MPI is imported only behind an ImportError guard.
+DEP001 = ["mpi4py"]
+# Generated protobuf modules (excluded above) consume this runtime dependency.
+DEP002 = ["protobuf"]
 
 [tool.ruff]
 target-version = "py310"
