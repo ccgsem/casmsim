@@ -24,7 +24,7 @@ import os
 from collections.abc import Callable, Iterator
 from concurrent import futures
 from pathlib import Path
-from threading import Lock, Thread
+from threading import Event, Lock, Thread
 from typing import Any, cast
 
 import grpc
@@ -36,6 +36,10 @@ from casmsim.proto import casm_runner_pb2 as pb2, casm_runner_pb2_grpc as pb2_gr
 from casmsim.protocols import RunnerModelAdapter
 
 ENDPOINT_FILENAME = "runner_endpoints.json"
+DEFAULT_MAX_WORKERS = 16
+"""gRPC worker threads; each live ``StreamObs`` call holds one until the run ends."""
+DEFAULT_START_TIMEOUT_SECONDS = 60.0
+"""How long ``StreamObs`` waits for ``Start`` when a consumer connects first."""
 
 
 def secure_run_directory(path: Path) -> None:
@@ -54,8 +58,12 @@ class SimulatorControlServicer(pb2_grpc.SimulatorControlServicer):
         broker: ObservationBroker,
         start_run: Callable[[str, bytes], None],
         cancel_run: Callable[[], bool | None] | None = None,
+        *,
+        start_timeout: float = DEFAULT_START_TIMEOUT_SECONDS,
     ) -> None:
         self._broker = broker
+        self._start_timeout = start_timeout
+        self._started = Event()
         self._start_run = start_run
         self._cancel_run = cancel_run
         self._cancel_requested = False
@@ -80,6 +88,7 @@ class SimulatorControlServicer(pb2_grpc.SimulatorControlServicer):
                 daemon=True,
             )
             self._worker.start()
+        self._started.set()
         return pb2.StartResponse(run_id=request.run_id)
 
     def _run(self, run_id: str, config_json: bytes) -> None:
@@ -138,20 +147,34 @@ class SimulatorControlServicer(pb2_grpc.SimulatorControlServicer):
             )
 
     def StreamObs(self, request: pb2.StreamObsRequest, context: grpc.ServicerContext) -> Iterator[pb2.ObsBatch]:
+        """Stream a channel's batches live, from ``start_tick`` until the run ends.
+
+        Retained batches are sent first, then new ones as the model publishes
+        them; the stream closes once the run is terminal and fully drained. A
+        consumer may connect before ``Start``: the call waits up to
+        ``start_timeout`` seconds for the run to be accepted.
+        """
+        if not self._started.wait(timeout=self._start_timeout):
+            context.abort(grpc.StatusCode.DEADLINE_EXCEEDED, "timed out waiting for a run to start")
         with self._lock:
             if request.run_id != self._run_id:
                 context.abort(grpc.StatusCode.NOT_FOUND, "unknown run_id")
+        if request.start_tick < 0:
+            context.abort(grpc.StatusCode.INVALID_ARGUMENT, "start_tick must not be negative")
+        batches = self._broker.subscribe(
+            request.channel,
+            start_batch_id=request.start_tick,
+            is_active=context.is_active,
+        )
         try:
-            result = self._broker.read(request.channel, start_batch_id=request.start_tick)
-        except ObservationCursorExpiredError as error:
+            for batch in batches:
+                sink = pa.BufferOutputStream()
+                with ipc.new_stream(sink, batch.table.schema) as writer:
+                    writer.write_table(batch.table)
+                yield pb2.ObsBatch(channel=batch.channel, tick=batch.batch_id, arrow_ipc=sink.getvalue().to_pybytes())
+        except (ObservationCursorExpiredError, ValueError) as error:
+            # Behind retained history, or ahead of the channel's next batch.
             context.abort(grpc.StatusCode.OUT_OF_RANGE, str(error))
-        for batch in result.batches:
-            if not context.is_active():
-                return
-            sink = pa.BufferOutputStream()
-            with ipc.new_stream(sink, batch.table.schema) as writer:
-                writer.write_table(batch.table)
-            yield pb2.ObsBatch(channel=batch.channel, tick=batch.batch_id, arrow_ipc=sink.getvalue().to_pybytes())
 
 
 def start_control_server(
@@ -160,11 +183,21 @@ def start_control_server(
     start_run: Callable[[str, bytes], None],
     *,
     cancel_run: Callable[[], bool | None] | None = None,
+    max_workers: int = DEFAULT_MAX_WORKERS,
+    start_timeout: float = DEFAULT_START_TIMEOUT_SECONDS,
 ) -> grpc.Server:
-    """Start a loopback-only control server and write its endpoint manifest."""
+    """Start a loopback-only control server and write its endpoint manifest.
+
+    Any endpoint manifest left by a previous run is removed before binding, so
+    a supervisor polling for the file never connects to a dead address.
+    ``max_workers`` must exceed the number of concurrent ``StreamObs`` consumers,
+    since each holds a worker thread until the run ends.
+    """
     secure_run_directory(run_dir)
-    server = grpc.server(futures.ThreadPoolExecutor(max_workers=4))
-    pb2_grpc.add_SimulatorControlServicer_to_server(SimulatorControlServicer(broker, start_run, cancel_run), server)
+    (run_dir / ENDPOINT_FILENAME).unlink(missing_ok=True)
+    server = grpc.server(futures.ThreadPoolExecutor(max_workers=max_workers))
+    servicer = SimulatorControlServicer(broker, start_run, cancel_run, start_timeout=start_timeout)
+    pb2_grpc.add_SimulatorControlServicer_to_server(servicer, server)
     port = server.add_insecure_port("127.0.0.1:0")
     if not port:
         raise RuntimeError("could not bind loopback gRPC control listener")

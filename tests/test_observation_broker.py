@@ -74,3 +74,72 @@ def test_broker_closure_is_visible_to_readers_and_prevents_publish():
     assert broker.read("agents").closed is True
     with pytest.raises(ObservationBrokerClosedError, match="after broker closure"):
         broker.publish("agents", _table(2))
+
+
+def test_subscribe_yields_retained_then_live_batches_until_close():
+    import threading
+
+    broker = ObservationBroker()
+    broker.publish("agents", _table(0))
+    received: list[int] = []
+    done = threading.Event()
+
+    def consume() -> None:
+        for batch in broker.subscribe("agents", poll_timeout=0.05):
+            received.append(batch.table.column("value")[0].as_py())
+        done.set()
+
+    consumer = threading.Thread(target=consume)
+    consumer.start()
+    broker.publish("agents", _table(1))
+    broker.publish("places", _table(99))
+    broker.publish("agents", _table(2))
+    assert not done.wait(0.2), "subscription must stay open until the broker closes"
+    broker.close()
+    consumer.join(2)
+    assert done.is_set()
+    assert received == [0, 1, 2]
+
+
+def test_subscribe_resumes_from_cursor_and_ends_on_closed_empty_channel():
+    broker = ObservationBroker()
+    for value in range(3):
+        broker.publish("agents", _table(value))
+    broker.close()
+
+    assert [b.batch_id for b in broker.subscribe("agents", start_batch_id=1)] == [1, 2]
+    assert list(broker.subscribe("never-published")) == []
+
+
+def test_subscribe_raises_when_cursor_predates_retention():
+    broker = ObservationBroker(ObservationBrokerLimits(max_batches_per_channel=2))
+    for value in range(4):
+        broker.publish("agents", _table(value))
+
+    with pytest.raises(ObservationCursorExpiredError):
+        next(broker.subscribe("agents", start_batch_id=0))
+
+
+def test_subscribe_stops_when_consumer_is_inactive():
+    broker = ObservationBroker()
+    broker.publish("agents", _table(0))
+    active = iter([True, True, False])
+
+    batches = list(broker.subscribe("agents", poll_timeout=0.01, is_active=lambda: next(active)))
+
+    assert [b.batch_id for b in batches] == [0]
+    assert not broker.closed
+
+
+@pytest.mark.parametrize("kwargs", [{"start_batch_id": -1}, {"poll_timeout": 0}])
+def test_subscribe_rejects_invalid_arguments(kwargs):
+    with pytest.raises(ValueError):
+        next(ObservationBroker().subscribe("agents", **kwargs))
+
+
+def test_subscribe_rejects_cursor_ahead_of_next_batch():
+    broker = ObservationBroker()
+    broker.publish("agents", _table(0))
+
+    with pytest.raises(ValueError, match="after channel"):
+        next(broker.subscribe("agents", start_batch_id=2))
