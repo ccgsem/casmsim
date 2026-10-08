@@ -8,6 +8,7 @@ simulation backend.
 from __future__ import annotations
 
 from collections import deque
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from enum import Enum
 from threading import Condition
@@ -141,6 +142,60 @@ class ObservationBroker:
                 raise ValueError(f"start_batch_id {start_batch_id} is after channel {channel!r}'s next batch")
             result = tuple(batch for batch in batches if batch.batch_id >= start_batch_id)
             return ObservationRead(batches=result, next_batch_id=next_batch_id, closed=self._closed)
+
+    def subscribe(
+        self,
+        channel: str,
+        *,
+        start_batch_id: int = 0,
+        poll_timeout: float = 0.5,
+        is_active: Callable[[], bool] | None = None,
+    ) -> Iterator[ObservationBatch]:
+        """Yield batches at or after ``start_batch_id`` as they are published.
+
+        Yields retained batches in order, then blocks until :meth:`publish` or
+        :meth:`close` wakes it. The iterator ends once the broker is closed and
+        every remaining batch has been yielded. Long-lived transports (gRPC
+        server streaming) use this instead of polling :meth:`read`.
+
+        ``poll_timeout`` bounds each wait so ``is_active`` is re-checked
+        regularly; when it returns ``False`` (for example, the gRPC client
+        disconnected) the iterator stops without waiting for closure.
+
+        Raises :class:`ObservationCursorExpiredError` if the cursor falls behind
+        retained history, either at the start or because eviction overtook a
+        slow consumer, and :class:`ValueError` if ``start_batch_id`` is ahead of
+        the channel's next batch (the same contract as :meth:`read`). The lock
+        is never held while a batch is yielded.
+        """
+        if start_batch_id < 0:
+            raise ValueError("start_batch_id must not be negative")
+        if poll_timeout <= 0:
+            raise ValueError("poll_timeout must be positive")
+        with self._condition:
+            next_batch_id = self._next_batch_ids.get(channel, 0)
+        if start_batch_id > next_batch_id:
+            raise ValueError(f"start_batch_id {start_batch_id} is after channel {channel!r}'s next batch")
+        cursor = start_batch_id
+        while True:
+            if is_active is not None and not is_active():
+                return
+            with self._condition:
+                batches = self._batches.get(channel, deque())
+                if batches and cursor < batches[0].batch_id:
+                    raise ObservationCursorExpiredError(
+                        f"channel {channel!r} retains batches from {batches[0].batch_id}, not {cursor}"
+                    )
+                pending = tuple(batch for batch in batches if batch.batch_id >= cursor)
+                closed = self._closed
+                if not pending and not closed:
+                    self._condition.wait(timeout=poll_timeout)
+                    continue
+            yield from pending
+            if pending:
+                cursor = pending[-1].batch_id + 1
+            elif closed:
+                return
 
     def close(self) -> None:
         """Mark the run terminal and wake transports waiting for new batches."""
